@@ -45,7 +45,6 @@ This file is part of the APM_PLANNER project
  */
 #include "MAVLinkDecoder.h"
 #include "MAVLinkProtocol.h"
-//#include "MAVLinkProtocol.h"
 #include <QMap>
 #include <QStringList>
 
@@ -56,7 +55,7 @@ class LinkManager : public QObject
 {
     Q_OBJECT
 public:
-    explicit LinkManager(QObject *parent = 0);
+    explicit LinkManager(QObject *parent = nullptr);
     static LinkManager* instance();
     ~LinkManager();
 
@@ -72,7 +71,7 @@ public:
     void disconnectLink(int index);
 
     UASInterface* getUas(int id);
-    UASInterface* createUAS(MAVLinkProtocol* mavlink, LinkInterface* link, int sysid, mavlink_heartbeat_t* heartbeat, QObject* parent=NULL);
+    UASInterface* createUAS(MAVLinkProtocol* mavlink, LinkInterface* link, int sysid, mavlink_heartbeat_t* heartbeat, QObject* parent = nullptr);
 
     void addLink(LinkInterface *link);
     QList<int> getLinks() const;
@@ -136,8 +135,8 @@ private:
     QMap<int,LinkInterface*> m_connectionMap;
     QMap<int,UASInterface*> m_uasMap;
     QMap<QString,int> m_portToBaudMap;
-    MAVLinkDecoder *m_mavlinkDecoder;
-    MAVLinkProtocol *m_mavlinkProtocol;
+    QScopedPointer<MAVLinkDecoder, QScopedPointerDeleteLater> m_mavlinkDecoder;
+    QScopedPointer<MAVLinkProtocol, QScopedPointerDeleteLater> m_mavlinkProtocol;
     QString m_logSubDir;
     bool m_mavlinkLoggingEnabled;
 };

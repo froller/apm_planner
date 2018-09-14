@@ -60,20 +60,30 @@ public:
      */
     struct dataType
     {
-        QString m_name;         /// Name of the type
-        quint32 m_ID;           /// ID of the type
-        int m_length;           /// Length in bytes
-        QString m_format;       /// format string like "QBB"
-        QStringList m_labels;   /// Lable (name) of each column
-        int m_timeStampIndex;   /// Index of the time stamp field - for faster access
+        QString m_name;                 /// Name of the type
+        quint32 m_ID;                   /// ID of the type
+        int m_length;                   /// Length in bytes
+        QString m_format;               /// format string like "QBB"
+        QStringList m_labels;           /// Lable (name) of each column
+        QStringList m_units;            /// Unit (name) of each column
+        QVector<double> m_multipliers;  /// Multiplier data for scaling the data
+        int m_timeStampIndex;           /// Index of the time stamp field - for faster access
 
         dataType() : m_ID(0xFFFFFFFF), m_length(0), m_timeStampIndex(0)
         {}
 
         dataType(const QString &name, quint32 ID, int length,
-                 const QString &format, const QStringList &labels, int timeColum) :
+                 const QString &format, const QStringList &labels, int timeColumn) :
             m_name(name), m_ID(ID), m_length(length),
-            m_format(format), m_labels(labels), m_timeStampIndex(timeColum)
+            m_format(format), m_labels(labels), m_timeStampIndex(timeColumn)
+        {}
+
+        dataType(const QString &name, quint32 ID, int length,
+                 const QString &format, const QStringList &labels,
+                 const QStringList &units, const QVector<double> &m_multipliers, int timeColumn) :
+            m_name(name), m_ID(ID), m_length(length),
+            m_format(format), m_labels(labels), m_units(units), m_multipliers(m_multipliers),
+            m_timeStampIndex(timeColumn)
         {}
     };
 
@@ -114,13 +124,13 @@ public:
      * @param typeID - ID of the type to ba added
      * @param typeLength - Length of the type to ba added (bytes)
      * @param typeFormat - format string like "QbbI"
-     * @param typeLabels - List of labels for each value in message (colums).
-     * @param timeColum - column index of the time stamp field
+     * @param typeLabels - List of labels for each value in message (columns).
+     * @param timeColumn - column index of the time stamp field
      *
      * @return - true success, false otherwise (data was not added)
      */
     virtual bool addDataType(const QString &typeName, quint32 typeID, int typeLength,
-                             const QString &typeFormat, const QStringList &typeLabels, int timeColum);
+                             const QString &typeFormat, const QStringList &typeLabels, int timeColumn);
 
     /**
      * @brief addDataRow adds a data row - a list of pairs of string and value - to the data storage.
@@ -133,6 +143,33 @@ public:
     virtual bool addDataRow(const QString &typeName, const QList<QPair<QString,QVariant> >  &values);
 
     /**
+     * @brief addUnitData adds unit data to the datamodel which can be used to add units to the
+     *        plotted data.
+     * @param unitID - Unique ID for this unit.
+     * @param unitName - Name for this unit.
+     */
+    virtual void addUnitData(quint8 unitID, const QString &unitName);
+
+    /**
+     * @brief addMultiplierData adds multiplier infos to the datamodel. This can be used for scaling.
+     * @param multiID - Unique ID for this multiplier
+     * @param multiplier - multiplier which scales the measurement to its Unit.
+     */
+    virtual void addMultiplierData(quint8 multiID, double multiplier);
+
+    /**
+     * @brief addMsgToUnitAndMultiplierData combines the unit data and the multiplier data with a
+     *        typeID. Every data field in a special type gets its own unit and multiplier which are
+     *        referenced by their ID.
+     * @param typeID - Type ID this iformation is for.
+     * @param multiplierFieldInfo - multiplier IDs
+     * @param unitFieldInfo - unit IDs
+     * @return - true success, false otherwise (data was not added)
+     */
+    virtual void addMsgToUnitAndMultiplierData(quint32 typeID, const QByteArray &multiplierFieldInfo,
+                                               const QByteArray &unitFieldInfo);
+
+    /**
      * @brief selectedRowChanged must be called if the selected row in the datamodel changes.
      *        It is needed to emit the right header data for the selected row.
      * @param current - QModelIndex holding the current row.
@@ -142,7 +179,9 @@ public:
     /**
      * @brief setTimeStamp - sets the time stamp type of the datamodel. It will be used
      *        for scaling the time stamps to seconds. This method MUST be called at the END
-     *        of the parsing process as it does some finalizings on the datamodel.
+     *        of the parsing process if there was no unit data in the log.
+     *        In case there was unit data in the log the \ref setupUnitData() method should
+     *        be called instead.
      *
      * @param timeStampName - name of the timestamp field. All types MUST have the same.
      * @param divisor - divisor used to scale the Time stamps to seconds
@@ -182,9 +221,10 @@ public:
     virtual QVector<QPair<double, QVariant> > getValues(const QString &parent, const QString &child, bool useTimeAsIndex) const;
 
     /**
-     * @brief getValues - delivers the X and Y values of one type for plotting. Due to the fact that the values
+     * @brief getValues - delivers the X and Y values of one type for plotting. If the model supports
+     *        scaling the values will be scaled to their unit. Due to the fact that the values
      *        are delivered as double no string values can be fetched with this method.
-     * @param name - The name of the type containig the measurement like "IMU.GyrX"
+     * @param name - The name of the type containig the measurement like "IMU.GyrX" or "IMU.GyrX [rad/s]"
      * @param useTimeAsIndex - true - use time in index
      * @param xValues - reference of a vector for storing the X-Values
      * @param yValues - reference of a vector for storing the Y-Values
@@ -193,12 +233,37 @@ public:
     virtual bool getValues(const QString &name, bool useTimeAsIndex, QVector<double> &xValues, QVector<double> &yValues) const;
 
     /**
-     * @brief getDataRow - gets a whole data row like it was written into the model.
+     * @brief getRawDataRow - gets a whole data row like it was written into the model. Even if the Model
+     *        supports scaling the data is NOT scaled. Used for Ascii Log exporting.
      * @param index - Index of the row to be fetched.
      * @param name - conatains the name of the value after the call.
      * @param measurements - contains the measurements of this index after the call.
      */
-    virtual void getDataRow(const int index, QString &name, QVector<QVariant> &measurements) const;
+    virtual void getRawDataRow(int index, QString &name, QVector<QVariant> &measurements) const;
+
+    /**
+     * @brief getUnitData - returns the unit data stored in model. Can be empty if no unit data
+     *        available. Used for exporting.
+     * @return - container holding id to unit data. As the order is not important we just use the
+     *           same format as in datamodel.
+     */
+    virtual QHash<quint8, QString> getUnitData() const;
+
+    /**
+     * @brief getMultiplierData - returns the multiplier data stored in model. Can be empty if no multiplier data
+     *        available. Used for exporting.
+     * @return - container holding id to multiplier data. As the order is not important we just use the
+     *           same format as in datamodel.
+     */
+    virtual QHash<quint8, double> getMultiplierData() const;
+
+    /**
+     * @brief getMsgToUnitAndMultiplierData - returns the unit and the multiplier indexes used by a special
+     *        message type
+     * @param typeID - message type ID to get the data for
+     * @return - mulriplier and unit data for the requested message ID
+     */
+    virtual QPair<QByteArray, QByteArray> getMsgToUnitAndMultiplierData(quint32 typeID) const;
 
     /**
      * @brief getMinTimeStamp - getter for the smallest timestamp in log
@@ -238,11 +303,31 @@ public:
      *
      * @return String conatining the reason for the error.
      */
-    virtual QString getError();
+    virtual QString getError() const;
+
+    /**
+     * @brief setupUnitData processes the Unit data and adds it to every dataType stored in m_typeStorage.
+     *        This method MUST be called at the END of the parsing process if there was unit data in the log.
+     *        In case there was no unit data in the log the \ref setTimeStamp() method should
+     *        be called instead.
+     *
+     * @param timeStampName - name of the timestamp field. All types MUST have the same.
+     * @param divisor - divisor used to scale the Time stamps to seconds
+     * @return StringList containing all problems which occured while processing the unit data.
+     */
+    virtual QStringList setupUnitData(const QString &timeStampName, double divisor);
+
+    /**
+     * @brief ModelIsScaled returns true if datamodel contains scaling information
+     * @return true - datamodel is scaled, false it is not.
+     */
+    virtual bool ModelIsScaled() const;
 
 private:
 
-    static const int s_ColumnOffset = 2;                 /// Offset for colums cause model adds index and name column
+    constexpr static int s_ColumnOffset  = 2;           /// Offset for columns cause model adds index and name column
+    constexpr static char s_UnitParOpen  = '[';         /// Unit names are surrounded by this parenthesis
+    constexpr static char s_UnitParClose = ']';         /// Unit names are surrounded by this parenthesis
 
     typedef QPair<QString, QVariant> NameValuePair;     /// Type holding lable string and its value
     typedef QPair<QString, int> TypeIndexPair;          /// Type holding name and index
@@ -263,9 +348,7 @@ private:
 
     typedef QVector<IndexValueRow> ValueTable;            /// Type holding all data rows of a specific type
 
-
-
-    int m_columCount;           /// Holds the maximum column count of all rows
+    int m_columnCount;           /// Holds the maximum column count of all rows
     int m_currentRow;           /// The current selected row in table
 
     QString m_timeStampName;    /// Holds the name of the time stamp
@@ -283,6 +366,20 @@ private:
 
     QString m_errorText;                         /// Used to store current error
 
+    QHash<quint8, QString> m_unitStorage;           /// Holds UNIT data and unit id (if available)
+    QHash<quint8, double>  m_multiplierStorage;     /// Holds Multiplier data and multiplier id (if available)
+    QHash<quint32, QByteArray> m_typeIDToUnitFieldInfo;       /// Holds Unit IDs for every type
+    QHash<quint32, QByteArray> m_typeIDToMultiplierFieldInfo; /// Holds Multiplier IDs for every type
+
+
+    /**
+     * @brief getLabelName - Constructs and delivers the Label name for the dataType at a given index.
+     *        If unit information is available it will be added and sourrounded by [].
+     * @param index - Index of the label which shall be fetched from dataType
+     * @param type - The dataType the label shall be fetched from
+     * @return - String containing a least the label plus unit name if available.
+     */
+    QString getLabelName(int index, const dataType &type) const;
 };
 
 #endif // LOGDATASTORAGE_H

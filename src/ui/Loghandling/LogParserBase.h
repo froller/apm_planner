@@ -109,7 +109,7 @@ protected:
          * @param oldName - name string to search for
          * @param newName - the new name to replace the old one
          */
-        virtual void replaceLabelName(const QString &oldName, const QString newName);
+        virtual void replaceLabelName(const QString &oldName, const QString &newName);
 
         virtual QString getLabelAtIndex(int index) const;
         virtual bool hasNoTimestamp() const;
@@ -137,6 +137,12 @@ protected:
 
     timeStampType m_activeTimestamp;        /// the detected timestamp used for parsing
 
+    quint32 m_idUnitMessage;                /// to store the Type Id of the unit (UNIT) message
+    quint32 m_idMultMessage;                /// to store the Type Id of the multiplier (MULT) message
+    quint32 m_idFMTUMessage;                /// to store the Type Id of the Format unit multiplier (FMTU) message
+
+    bool m_hasUnitData;                     /// True if parsed log contains unit data
+
 
     /**
      * @brief checkForValidTimestamp verifies whether the descriptor has a
@@ -153,6 +159,16 @@ protected:
      * @return true - success, false - datamodel failure
      */
     bool storeNameValuePairList(QList<NameValuePair> &NameValuePairList, const typeDescriptor &desc);
+
+    /**
+     * @brief extendedStoreNameValuePairList checks for the unit data types (UNIT, MULT, FMTU)
+     *        and inserts them correctly into the datamodel. All other data will be passed to
+     *        the storeNameValuePairList() method.
+     * @param NameValuePairList to be stored
+     * @param desc - matching descriptor for this NameValuePairList
+     * @return true success, false otherwise
+     */
+    bool extendedStoreNameValuePairList(QList<NameValuePair> &NameValuePairList, const typeDescriptor &desc);
 
     /**
      * @brief handleTimeStamp does all time stamp handling. It checks if the time is increasing and
@@ -186,6 +202,13 @@ protected:
      * @return - valid time stamp
      */
     quint64 nextValidTimestamp();
+
+    /**
+     * @brief specialDescriptorHandling does some extra handling for speial descriptor. As some
+     *        message types need special treatment and / or deliver special information they can
+     *        be handled inside this method.
+     */
+    void specialDescriptorHandling(typeDescriptor &desc);
 
 
 private:

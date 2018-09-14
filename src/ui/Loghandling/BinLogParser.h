@@ -64,9 +64,8 @@ public:
 
 private:
 
-    static const quint32 s_FMTMessageType  = 0x80; /// Type Id of the format (FMT) message
-    static const quint32 s_STRTMessageType = 0x0A; /// Type Id of the Start (STRT) message
-
+    static const quint8 s_FMTMessageType  = 0x80; /// Type Id of the format (FMT) message
+ 
     static const int s_MinHeaderSize = 5;        /// Minimal size to be able to start parsing
     static const int s_HeaderOffset  = 3;        /// byte offset after successful header parsing
     static const quint8 s_StartByte1 = 0xA3;     /// Startbyte 1 is always first byte in one message
@@ -76,8 +75,8 @@ private:
     static const int s_FMTFormatSize = 16;       /// Size of the format field in FMT message
     static const int s_FMTLabelsSize = 64;       /// Size of the comma delimited names field in FMT message
 
-    static const quint32 s_FloatSoftNaN  = 0x7FC04152;         /// Value to detect a quiet/soft float NaN from ardupilot
-    static const quint64 s_DoubleSoftNaN = 0x7FF952445550490A; /// Value to detect a quiet/soft double NaN from ardupilot
+    static const quint32 s_FloatHardNaN  = 0x7FC00000;         /// Value to detect a quiet/soft float NaN from ardupilot
+    static const quint64 s_DoubleHardNaN = 0x7FF8000000000000; /// Value to detect a quiet/soft double NaN from ardupilot
 
 
     /**
@@ -92,7 +91,7 @@ private:
 
     QByteArray m_dataBlock;                 /// Data buffer for parsing.
     int m_dataPos;                          /// bytecounter for running through the data packet.
-    quint32 m_messageType;                   /// Holding type of the actual message.
+    quint32 m_messageType;                  /// Holding type of the actual message.
 
     QHash<quint32, binDescriptor> m_typeToDescriptorMap;   /// hashMap storing a format descriptor for every message type
 
@@ -139,6 +138,7 @@ private:
      * @return
      */
     bool parseDataByDescriptor(QList<NameValuePair> &NameValuePairList, const binDescriptor &desc);
+
 };
 
 #endif // BINLOGPARSER_H

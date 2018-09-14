@@ -106,12 +106,8 @@ AP2DataPlotStatus AsciiLogParser::parse(QFile &logfile)
                 asciiDescriptor descriptor;
                 if(parseFMTMessage(descriptor))
                 {
-                    if(descriptor.m_name == "GPS" && !descriptor.m_labels.contains("GPSTimeMS"))
-                    {
-                        // Special handling for "GPS" messages that have a "TimeMS"
-                        // timestamp but scaling and value does not mach all other time stamps
-                        descriptor.replaceLabelName("TimeMS", "GPSTimeMS");
-                    }
+                    // do some special handling if needed
+                    specialDescriptorHandling(descriptor);
                     if(m_activeTimestamp.valid())
                     {
                         descriptor.finalize(m_activeTimestamp);
@@ -144,7 +140,7 @@ AP2DataPlotStatus AsciiLogParser::parse(QFile &logfile)
                 {
                     if(NameValuePairList.size() >= 1)   // need at least one element
                     {
-                        if(!storeNameValuePairList(NameValuePairList, descriptor))
+                        if(!extendedStoreNameValuePairList(NameValuePairList, descriptor))
                         {
                             return m_logLoadingState;
                         }
@@ -191,7 +187,20 @@ AP2DataPlotStatus AsciiLogParser::parse(QFile &logfile)
         m_logLoadingState.setNoMessageBytes(m_noMessageBytes);
     }
 
-    m_dataStoragePtr->setTimeStamp(m_activeTimestamp.m_name, m_activeTimestamp.m_divisor);
+    if(m_hasUnitData)
+    {
+       QStringList errors = m_dataStoragePtr->setupUnitData(m_activeTimestamp.m_name, m_activeTimestamp.m_divisor);
+       for(const auto &error : errors)
+       {
+           QLOG_WARN() << error;
+           m_logLoadingState.corruptFMTRead(static_cast<int>(m_MessageCounter), "Unit or scaling error. " + error);
+       }
+    }
+    else
+    {
+        m_dataStoragePtr->setTimeStamp(m_activeTimestamp.m_name, m_activeTimestamp.m_divisor);
+    }
+
     return m_logLoadingState;
 }
 
@@ -280,7 +289,7 @@ bool AsciiLogParser::parseDataByDescriptor(QList<NameValuePair> &NameValuePairLi
 {
     static QString intdef("bhi");   // unsigned 32 bit max types.
     static QString uintdef("BHI");  // signed 32 bit max types.
-    static QString floatdef("cCeEfL");
+    static QString floatdef("cCeEfLd");
     static QString chardef("nNZM");
 
     if(m_tokensToParse.size() != desc.m_format.size())
@@ -333,7 +342,7 @@ bool AsciiLogParser::parseDataByDescriptor(QList<NameValuePair> &NameValuePairLi
         {
             bool ok = false;
             double value = token.toDouble(&ok);
-            if(ok && !qIsInf(value) && !qIsNaN(value))
+            if(ok && !qIsInf(value))
             {
                 NameValuePairList.append(NameValuePair(desc.getLabelAtIndex(i), value));
             }

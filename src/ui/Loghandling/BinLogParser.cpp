@@ -44,7 +44,7 @@ bool BinLogParser::binDescriptor::isValid() const
                (m_format.size() > 0) && (m_labels.size() > 0);
     }
     // STRT message has also a special behaviour as it has no data fields in older logs.
-    else if(m_ID == BinLogParser::s_STRTMessageType)
+    else if(m_name == "STRT")
     {
         if(m_format.size() == 0 && m_length == 3)
         {
@@ -112,12 +112,8 @@ AP2DataPlotStatus BinLogParser::parse(QFile &logfile)
                 binDescriptor descriptor;
                 if(parseFMTMessage(descriptor))
                 {
-                    if(descriptor.m_name == "GPS")
-                    {
-                        // Special handling for "GPS" messages that have a "TimeMS"
-                        // timestamp but scaling and value does not mach all other time stamps
-                        descriptor.replaceLabelName("TimeMS", "GPSTimeMS");
-                    }
+                    // do some special handling if needed
+                    specialDescriptorHandling(descriptor);
                     if(m_activeTimestamp.valid())
                     {
                         descriptor.finalize(m_activeTimestamp);
@@ -146,7 +142,7 @@ AP2DataPlotStatus BinLogParser::parse(QFile &logfile)
                 {
                     if(NameValuePairList.size() >= 1)   // need at least one element
                     {
-                        if(!storeNameValuePairList(NameValuePairList, descriptor))
+                        if(!extendedStoreNameValuePairList(NameValuePairList, descriptor))
                         {
                             return m_logLoadingState;
                         }
@@ -182,7 +178,20 @@ AP2DataPlotStatus BinLogParser::parse(QFile &logfile)
         m_logLoadingState.setNoMessageBytes(noMessageBytes);
     }
 
-    m_dataStoragePtr->setTimeStamp(m_activeTimestamp.m_name, m_activeTimestamp.m_divisor);
+    if(m_hasUnitData)
+    {
+       QStringList errors = m_dataStoragePtr->setupUnitData(m_activeTimestamp.m_name, m_activeTimestamp.m_divisor);
+       for(const auto &error : errors)
+       {
+           QLOG_WARN() << error;
+           m_logLoadingState.corruptFMTRead(static_cast<int>(m_MessageCounter), "Unit or scaling error. " + error);
+       }
+    }
+    else
+    {
+        m_dataStoragePtr->setTimeStamp(m_activeTimestamp.m_name, m_activeTimestamp.m_divisor);
+    }
+
     return m_logLoadingState;
 }
 
@@ -321,7 +330,7 @@ bool BinLogParser::parseDataByDescriptor(QList<NameValuePair> &NameValuePairList
             {
                 // Check if its a soft/quiet or a hard/signalling NaN
                 const quint32 *valPtr = reinterpret_cast<quint32*>(&val);
-                if (*valPtr != s_FloatSoftNaN)
+                if (*valPtr == s_FloatHardNaN)
                 {
                     QLOG_WARN() << "Float resolves to hard NaN - This is a serious log error as data is corrupted."
                                 << "Graphing may not work as expected for data of type " << desc.m_name;
@@ -343,7 +352,7 @@ bool BinLogParser::parseDataByDescriptor(QList<NameValuePair> &NameValuePairList
             {
                 // Check if its a soft/quiet or a hard/signalling NaN
                 const quint64 *valPtr = reinterpret_cast<quint64*>(&val);
-                if (*valPtr != s_DoubleSoftNaN)
+                if (*valPtr == s_DoubleHardNaN)
                 {
                     QLOG_WARN() << "Double resolves to hard NaN - This is a serious log error as data is corrupted."
                                 << "Graphing may not work as expected for data of type " << desc.m_name;
@@ -401,31 +410,38 @@ bool BinLogParser::parseDataByDescriptor(QList<NameValuePair> &NameValuePairList
         {
             qint16 val;
             packetstream >> val;
-            NameValuePairList.append(NameValuePair(desc.getLabelAtIndex(i), val / 100.0));
+            // backward compatibilty - if we have scaling data (ardupilot 3.6 and later) we use them when getting data out of storage
+            // without scaling info we do the scaling here
+            double scaledVal = m_hasUnitData ? val : val / 100.0;
+            NameValuePairList.append(NameValuePair(desc.getLabelAtIndex(i), scaledVal));
         }
         else if (typeCode == 'C') //uint16_t * 100
         {
             quint16 val;
             packetstream >> val;
-            NameValuePairList.append(NameValuePair(desc.getLabelAtIndex(i), val / 100.0));
+            double scaledVal = m_hasUnitData ? val : val / 100.0;
+            NameValuePairList.append(NameValuePair(desc.getLabelAtIndex(i), scaledVal));
         }
         else if (typeCode == 'e') //int32_t * 100
         {
             qint32 val;
             packetstream >> val;
-            NameValuePairList.append(NameValuePair(desc.getLabelAtIndex(i), val / 100.0));
+            double scaledVal = m_hasUnitData ? val : val / 100.0;
+            NameValuePairList.append(NameValuePair(desc.getLabelAtIndex(i), scaledVal));
         }
         else if (typeCode == 'E') //uint32_t * 100
         {
             quint32 val;
             packetstream >> val;
-            NameValuePairList.append(NameValuePair(desc.getLabelAtIndex(i), val / 100.0));
+            double scaledVal = m_hasUnitData ? val : val / 100.0;
+            NameValuePairList.append(NameValuePair(desc.getLabelAtIndex(i), scaledVal));
         }
         else if (typeCode == 'L') //uint32_t GPS Lon/Lat * 10000000
         {
             qint32 val;
             packetstream >> val;
-            NameValuePairList.append(NameValuePair(desc.getLabelAtIndex(i), val / 10000000.0));
+            double scaledVal = m_hasUnitData ? val : val / 10000000.0;
+            NameValuePairList.append(NameValuePair(desc.getLabelAtIndex(i), scaledVal));
         }
         else if (typeCode == 'M')
         {
@@ -466,7 +482,7 @@ bool BinLogParser::extendedStoreDescriptor(const binDescriptor &desc)
     bool rc = true;
     if(m_descriptorForDeferredStorage.size() > 0)
     {
-        foreach (const binDescriptor &descriptor, m_descriptorForDeferredStorage)
+        for(const auto &descriptor : m_descriptorForDeferredStorage)
         {
             bool localRc = storeDescriptor(descriptor);
             rc = rc && localRc;
@@ -479,4 +495,6 @@ bool BinLogParser::extendedStoreDescriptor(const binDescriptor &desc)
     }
     return rc;
 }
+
+
 

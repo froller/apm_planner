@@ -29,8 +29,7 @@ This file is part of the QGROUNDCONTROL project
  *
  */
 
-#ifndef _UAS_H_
-#define _UAS_H_
+#pragma once
 
 #include "UASInterface.h"
 #include <MAVLinkProtocol.h>
@@ -40,6 +39,8 @@ This file is part of the QGROUNDCONTROL project
 #include "QGCFlightGearLink.h"
 #include "QGCJSBSimLink.h"
 //#include "QGCXPlaneLink.h"
+
+
 
 /**
  * @brief A generic MAVLINK-connected MAV/UAV
@@ -1055,6 +1056,7 @@ protected:
     quint64 lastSendTimeGPS;     ///< Last HIL GPS message sent
     quint64 lastSendTimeSensors;
 
+    QMutex requestQueueMutex;
     QList< QPair<int, QString> >  paramRequestQueue;
 
     QTimer m_parameterSendTimer;
@@ -1074,6 +1076,3 @@ private:
     QString statusImperial() const;
     QString statusGPS() const;
 };
-
-
-#endif // _UAS_H_
