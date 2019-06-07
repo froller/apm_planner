@@ -72,8 +72,8 @@ linux-g++-64 | linux-g++ {
     contains( DISTRO, "Arch" ) {
         message(ArchLinux Build)
         DEFINES += Q_ARCHLINUX
-        INCLUDEPATH += /usr/include/openssl-1.0
-        LIBRARYPATH += /usr/lib/openssl-1.0
+#        INCLUDEPATH += /usr/include/openssl-1.0
+#        LIBRARYPATH += /usr/lib/openssl-1.0
     }
 
     contains( REDHAT_RELEASE, "Fedora" ) {
@@ -208,8 +208,8 @@ OpenBSDBuild {
 
 #    LIBS += -lsndfile
     LIBS += -lz
-    LIBS += -lssl -lcrypto
-    DEFINES += OPENSSL
+#    LIBS += -lssl -lcrypto
+#    DEFINES += OPENSSL
 }
 
 LinuxBuild {
@@ -222,8 +222,8 @@ LinuxBuild {
 
     LIBS += -lsndfile -lasound
     LIBS += -lz
-    LIBS += -lssl -lcrypto
-    DEFINES += OPENSSL
+#    LIBS += -lssl -lcrypto
+#    DEFINES += OPENSSL
 }
 
 WindowsBuild {
@@ -379,7 +379,6 @@ FORMS += \
     src/ui/watchdog/WatchdogView.ui \
     src/ui/QGCFirmwareUpdate.ui \
     src/ui/QGCPxImuFirmwareUpdate.ui \
-    src/ui/QMap3D.ui \
     src/ui/SlugsDataSensorView.ui \
     src/ui/SlugsHilSim.ui \
     src/ui/SlugsPadCameraControl.ui \
@@ -491,6 +490,7 @@ FORMS += \
     src/ui/uas/PreFlightCalibrationDialog.ui \
     src/ui/configuration/RadioFlashWizard.ui \
     src/ui/LogAnalysis.ui \
+    src/ui/LogAnalysisMap.ui \
     src/ui/configuration/FrameTypeConfigOld.ui \
     src/ui/configuration/FrameTypeConfigNew.ui
 
@@ -728,6 +728,7 @@ HEADERS += \
     src/ui/Loghandling/LogdataStorage.h \
     src/ui/Loghandling/LogExporter.h \
     src/ui/Loghandling/LogAnalysis.h \
+    src/ui/Loghandling/LogAnalysisMap.h \
     src/ui/Loghandling/PresetManager.h
 
 SOURCES += src/main.cc \
@@ -954,6 +955,7 @@ SOURCES += src/main.cc \
     src/ui/Loghandling/LogdataStorage.cpp \
     src/ui/Loghandling/LogExporter.cpp \
     src/ui/Loghandling/LogAnalysis.cpp \
+    src/ui/Loghandling/LogAnalysisMap.cpp\
     src/ui/Loghandling/PresetManager.cpp
 
 MacBuild | WindowsBuild : contains(GOOGLEEARTH, enable) { #fix this to make sense ;)
